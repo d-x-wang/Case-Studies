@@ -1,0 +1,172 @@
+---
+title: "Case Study 2 Analysis"
+author: "DW"
+date: "2022-10-05"
+output:   
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Case Study 2
+
+Bellabeat provided smart device fitness data and requested insights on how consumers are using the smart devices.
+
+Data was provided for the month of April 2016.
+
+Data was processed and cleaned based on the following workflow:
+
+```{r loading_packages, message=FALSE}
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(skimr)
+library(lubridate)
+library(janitor)
+library(dplyr)
+
+# Extract CSV data
+files = list.files(path = "C://Users//dlwan//Documents//Google_Certificate//Case2//Data")
+setwd("C://Users//dlwan//Documents//Google_Certificate//Case2//Data")
+
+file_use = list()
+file_name = list()
+
+# Check file list contains only csv
+for (x in 1:length(files)) {
+  ext = sapply(strsplit(files[x],split=".",fixed=TRUE),tail,1)
+  name = sapply(strsplit(files[x],"_"),"[",1)
+  if(ext == "csv") {
+    file_use = append(file_use,files[x])
+    file_name = append(file_name,name)
+  }
+}
+
+id_cnt = list()
+day_cnt = list()
+
+time = list('ActivityDate','ActivityDay','Time','ActivityHour','ActivityMinute','SleepDay','Date')
+
+# Store each csv to file name
+# Convert Date to appropriate format
+for (x in 1:length(file_use)) {
+  temp = read_csv(file_use[x])
+  
+  # Remove duplicate values
+  temp = distinct(temp)
+  for (j in 1:length(time)){
+    index = which(colnames(temp) == time[j])
+    # Check if time index is in column names
+    if (length(index)>0){
+      # Add column for date in Date format
+      # Remove NA
+      test = paste(time[j])
+      # print(sum(duplicated(temp)))
+      if (grepl(":",temp[1,index])){
+        temp = temp %>% 
+          mutate(date_time = as.POSIXct(temp[[test]],format ="%m/%d/%Y %I:%M:%S %p", origin = '1970-01-01')) %>% 
+          mutate(date_day = as.Date(date_time)) %>% 
+          mutate(day_of_week = wday(date_day)) %>%
+          
+          na.omit()
+      } else {
+        temp = temp %>% 
+          mutate(date_day = as.POSIXct(temp[[test]],format ="%m/%d/%Y", origin = '1970-01-01')) %>% 
+          mutate(day_of_week = wday(date_day)) %>%
+          na.omit()
+      }
+    } 
+  }
+  temp$Id = as.character(temp$Id)
+  assign(unlist(file_name[x]),temp)
+  id_cnt = append(id_cnt,n_distinct(get(unlist(file_name[x]))$"Id"))
+  day_cnt = append(day_cnt,n_distinct(get(unlist(file_name[x]))$date_day))
+}
+```
+
+## Daily Intensity 
+Daily intensity data consisted of number of steps, distance, and calories.
+
+Summary statistics for each member, including average number of steps, average distance, average calories, and number of recorded days.
+
+Not every member used smart device each day.
+
+```{r statistics_members, echo=FALSE}
+sum_activity = dailyActivity %>% 
+  group_by(Id) %>% 
+  filter(TotalSteps>0) %>%
+  summarize(Avg_Steps = mean(TotalSteps),Avg_Distance=mean(TotalDistance),Avg_Calories = mean(Calories),days=length(TotalSteps), Total_steps = sum(TotalSteps), Total_Distance=sum(TotalDistance), Total_Calories = sum(Calories),
+            Logged_Distance = sum(VeryActiveDistance)+sum(ModeratelyActiveDistance)+sum(LightActiveDistance),
+            V_dist_avg = sum(VeryActiveDistance)/Logged_Distance,
+            m_dist_avg= sum(ModeratelyActiveDistance)/Logged_Distance,
+            l_dist_avg= sum(LightActiveDistance)/Logged_Distance,
+            Logged_Minutes = sum(VeryActiveMinutes)+sum(FairlyActiveMinutes)+sum(LightlyActiveMinutes),
+            V_min_avg=sum(VeryActiveMinutes)/Logged_Minutes,
+            m_min_avg=sum(FairlyActiveMinutes)/Logged_Minutes,
+            l_min_avg=sum(LightlyActiveMinutes)/Logged_Minutes)
+print(sum_activity[0:5], n=40)
+```
+
+Following visuals highlight key parameters for each member.
+
+```{r daily_steps, echo=FALSE}
+# Plot of Average number of steps vs Number of Active Days
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=Avg_Steps))+
+  ggtitle("Average Steps vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Average Number of Steps")
+```
+
+People who had an average number 6,000 steps a days were more likely to continuously use the smart device.
+
+
+```{r monthly_calories, echo=FALSE}
+# Plot of Total calories vs Number of Active Days
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=Total_Calories))+
+  ggtitle("Total Calories vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Total Calories")
+```
+
+People who had an average monthly 45,000 calories were more likely to continuously use the smart device.
+
+
+```{r activity_intensity, echo=FALSE}
+sum_intensity = dailyActivity %>% 
+  group_by(Id) %>% 
+  summarize(days=length(Id),
+            Logged_Distance = sum(VeryActiveDistance)+sum(ModeratelyActiveDistance)+sum(LightActiveDistance)+sum(SedentaryActiveDistance),
+            V_dist_avg = sum(VeryActiveDistance)/Logged_Distance,
+            m_dist_avg= sum(ModeratelyActiveDistance)/Logged_Distance,
+            l_dist_avg= sum(LightActiveDistance)/Logged_Distance,
+            Logged_Minutes = sum(VeryActiveMinutes)+sum(FairlyActiveMinutes)+sum(LightlyActiveMinutes)+sum(SedentaryMinutes),
+            V_min_avg=sum(VeryActiveMinutes)/Logged_Minutes,
+            m_min_avg=sum(FairlyActiveMinutes)/Logged_Minutes,
+            l_min_avg=sum(LightlyActiveMinutes)/Logged_Minutes,
+            s_min_avg=sum(SedentaryMinutes)/Logged_Minutes)
+
+## Plots of Intensity Distance Ratio vs Number of Active Days 
+ggplot(data=sum_intensity)+
+  geom_point(mapping=aes(x=days,y=V_dist_avg))+
+  ggtitle("Intensity Distance vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Proportion of Very Intense Distance")
+
+## Plots of Intensity Time Ratio vs Number of Active Days 
+ggplot(data=sum_intensity)+
+  geom_point(mapping=aes(x=days,y=V_min_avg+m_min_avg))+
+  ggtitle("Intensity Time vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Proportion of Very Intense Time")
+```  
+
+Participants that spend 40 percent of the distance and  20 percent of active time at a high intensity would be more likely to use the smart device
+
+## Conclusions
+People who are more active in terms of further distance traveled or high degree of intensity are more likely to consistently use the smart device.
