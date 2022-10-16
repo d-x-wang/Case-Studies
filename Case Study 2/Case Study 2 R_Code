@@ -1,0 +1,301 @@
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(skimr)
+library(lubridate)
+library(janitor)
+library(dplyr)
+
+# Extract CSV data
+files = list.files(path = "C://Users//dlwan//Documents//Google_Certificate//Case2//Data")
+setwd("C://Users//dlwan//Documents//Google_Certificate//Case2//Data")
+#file_name = sapply(strsplit(files,"_"),"[",1)
+#file_ext = sapply(strsplit(files,split=".",fixed=TRUE),tail,1)
+
+file_use = list()
+file_name = list()
+# Check file list contains only csv
+for (x in 1:length(files)) {
+  ext = sapply(strsplit(files[x],split=".",fixed=TRUE),tail,1)
+  name = sapply(strsplit(files[x],"_"),"[",1)
+  if(ext == "csv") {
+    file_use = append(file_use,files[x])
+    file_name = append(file_name,name)
+  }
+}
+
+id_cnt = list()
+day_cnt = list()
+
+time = list('ActivityDate','ActivityDay','Time','ActivityHour','ActivityMinute','SleepDay','Date')
+
+# Store each csv to file name
+# Convert Date to appropriate format
+for (x in 1:length(file_use)) {
+  temp = read_csv(file_use[x])
+  
+  # Remove duplicate values
+  temp = distinct(temp)
+  for (j in 1:length(time)){
+    index = which(colnames(temp) == time[j])
+    # Check if time index is in column names
+    if (length(index)>0){
+      # Add column for date in Date format
+      # Remove NA
+      test = paste(time[j])
+      print(sum(duplicated(temp)))
+      if (grepl(":",temp[1,index])){
+        temp = temp %>% 
+          mutate(date_time = as.POSIXct(temp[[test]],format ="%m/%d/%Y %I:%M:%S %p", origin = '1970-01-01')) %>% 
+          mutate(date_day = as.Date(date_time)) %>% 
+          mutate(day_of_week = wday(date_day)) %>%
+          
+          na.omit()
+      } else {
+        temp = temp %>% 
+          mutate(date_day = as.POSIXct(temp[[test]],format ="%m/%d/%Y", origin = '1970-01-01')) %>% 
+          mutate(day_of_week = wday(date_day)) %>%
+          na.omit()
+      }
+    } 
+  }
+  temp$Id = as.character(temp$Id)
+  assign(unlist(file_name[x]),temp)
+  id_cnt = append(id_cnt,n_distinct(get(unlist(file_name[x]))$"Id"))
+  day_cnt = append(day_cnt,n_distinct(get(unlist(file_name[x]))$date_day))
+}
+
+# Test for days (Sunday = 1, Saturday = 7)
+dailyActivitytest = dailyActivity %>% 
+  mutate(day_of_week = wday(date_day))
+
+# Test Plot of Number of Active Days per Weekday
+ggplot(data=dailyActivitytest)+
+  geom_bar(mapping=aes(x=day_of_week),position = position_dodge2(width=0.5))+
+  facet_wrap(~Id) +
+  ggtitle("Number of Active Days") + 
+  xlab("Weekday") +
+  ylab("Number of Days")
+
+
+
+# QC Data
+for (x in 1:length(file_use)) {
+  cat("ID count for file",unlist(file_name[x]),"is",unlist(id_cnt[x]),sep=" ",fill=TRUE)
+  cat("Day count for file",unlist(file_name[x]),"is",unlist(day_cnt[x]),sep=" ",fill=TRUE)
+}
+  
+# Daily Activity Analysis
+## Summary Statistics for Average Daily Steps, Distance, Calories, and number of active days
+sum_activity = dailyActivity %>% 
+  group_by(Id) %>% 
+  filter(TotalSteps>0) %>%
+  summarize(Avg_Steps = mean(TotalSteps),Avg_Distance=mean(TotalDistance),Avg_Calories = mean(Calories),days=length(TotalSteps), Total_steps = sum(TotalSteps), Total_Distance=sum(TotalDistance), Total_Calories = sum(Calories),
+            Logged_Distance = sum(VeryActiveDistance)+sum(ModeratelyActiveDistance)+sum(LightActiveDistance),
+            V_dist_avg = sum(VeryActiveDistance)/Logged_Distance,
+            m_dist_avg= sum(ModeratelyActiveDistance)/Logged_Distance,
+            l_dist_avg= sum(LightActiveDistance)/Logged_Distance,
+            Logged_Minutes = sum(VeryActiveMinutes)+sum(FairlyActiveMinutes)+sum(LightlyActiveMinutes),
+            V_min_avg=sum(VeryActiveMinutes)/Logged_Minutes,
+            m_min_avg=sum(FairlyActiveMinutes)/Logged_Minutes,
+            l_min_avg=sum(LightlyActiveMinutes)/Logged_Minutes)
+
+print(sum_activity, n=40)
+
+## Plots of Intensity Distance Ratio vs Number of Active Days 
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=V_dist_avg))+
+  ggtitle("Intensity Distance vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Proportion of Very Intense Distance")
+
+## Plots of Intensity Time Ratio vs Number of Active Days 
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=V_min_avg))+
+  ggtitle("Intensity Time vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Proportion of Very Intense Time")
+
+
+# Plot of Total distance vs Number of Active Days
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=Total_Distance))+
+  ggtitle("Average Distance vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Total Distance")
+
+# Plot of Average number daily distance vs Number of Active Days
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=Avg_Distance))+
+  ggtitle("Average Distance vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Average Distance")
+
+# Plot of Total number of steps vs Number of Active Days
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=Total_steps))+
+  ggtitle("Total Monthly Steps vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Total Number of Steps")
+
+# Plot of Average number of steps vs Number of Active Days
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=Avg_Steps))+
+  ggtitle("Average Steps vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Average Number of Steps")
+
+# Plot of Total calories vs Number of Active Days
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=Total_Calories))+
+  ggtitle("Total Calories vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Total Calories")
+
+# Plot of Average number of steps vs Number of Active Days
+ggplot(data=sum_activity)+
+  geom_point(mapping=aes(x=days,y=Avg_Calories))+
+  ggtitle("Average Calories vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Average Daily Calories")
+
+# Plot of Number of Active Days
+ggplot(data=dailyActivity)+
+  geom_bar(mapping=aes(x=Id),position = position_dodge2(width=0.5))+
+  ggtitle("Number of Active Days") + 
+  xlab("Id") +
+  ylab("Number of Days") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+
+
+
+# Plot of Number of Active Days per Weekday
+ggplot(data=dailyActivity)+
+  geom_bar(mapping=aes(x=day_of_week),position = position_dodge2(width=0.5))+
+  facet_wrap(~Id) +
+  ggtitle("Number of Active Days") + 
+  xlab("Weekday") +
+  ylab("Number of Days") 
+
+# Plot of Daily Steps based on ID and Weekday
+ggplot(data=dailyActivity)+
+  geom_bar(mapping=aes(x=day_of_week,y=TotalSteps), stat='identity',position = position_dodge2(width=0.5))+
+  facet_wrap(~Id)+
+  ggtitle("Daily Steps") + 
+  xlab("Weekday") +
+  ylab("Number of Steps")
+
+
+# Plot of Average Daily Steps based on ID and day of week
+ggplot(data=dailyActivity)+
+  geom_bar(mapping=aes(x=day_of_week,y=TotalSteps),position = position_dodge2(width=0.5),stat = "summary", fun = mean)+
+  facet_wrap(~Id)+
+  ggtitle("Daily Steps") + 
+  xlab("Day") +
+  ylab("Number of Steps")
+
+
+# Plot of Average Daily Distance based on ID and day of week
+ggplot(data=dailyActivity)+
+  geom_bar(mapping=aes(x=day_of_week,y=TotalDistance),position = position_dodge2(width=0.5),stat = "summary", fun = mean)+
+  facet_wrap(~Id)+
+  ggtitle("Daily Steps") + 
+  xlab("Day") +
+  ylab("Average Distance")
+
+
+
+# Plot of Daily Distance based on ID
+ggplot(data=dailyActivity)+
+  geom_bar(mapping=aes(x=date_day,y=TotalDistance), stat='identity',position = position_dodge2(width=0.5))+
+  facet_wrap(~Id)+
+  ggtitle("Daily Distance") + 
+  xlab("Day") +
+  ylab("Distance") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# Daily Calories Analysis
+## Summary Statistics for average calories and number of active days
+sum_calories = dailyCalories %>% 
+  group_by(Id) %>% 
+  summarize(Avg_Calories = mean(Calories),days=length(Calories))
+
+print(sum_calories, n=40)
+
+# Plot of Number of Active Days
+ggplot(data=dailyCalories)+
+  geom_bar(mapping=aes(x=Id),position = position_dodge2(width=0.5))+
+  ggtitle("Number of Active Days") + 
+  xlab("Id") +
+  ylab("Number of Days")
+
+# Plot of Number of Active Days per Weekday
+ggplot(data=dailyCalories)+
+  geom_bar(mapping=aes(x=day_of_week),position = position_dodge2(width=0.5))+
+  facet_wrap(~Id) +
+  ggtitle("Number of Active Days") + 
+  xlab("Weekday") +
+  ylab("Number of Days")
+
+# Plot of Daily Distance based on ID
+ggplot(data=dailyCalories)+
+  geom_bar(mapping=aes(x=date_day,y=Calories), stat='identity',position = position_dodge2(width=0.5))+
+  facet_wrap(~Id)+
+  ggtitle("Daily Calories") + 
+  xlab("Day") +
+  ylab("Calories")
+
+
+# Daily Intensities Analysis
+## Calculate total number of minutes and total distance
+dailyIntensities = dailyIntensities %>%
+  mutate(TotalMinutes = SedentaryMinutes+LightlyActiveMinutes+FairlyActiveMinutes+VeryActiveMinutes) %>% 
+  mutate(TotalDistance = SedentaryActiveDistance+LightActiveDistance+ModeratelyActiveDistance+VeryActiveDistance) %>%
+  mutate(Sed_Light_Dis = (SedentaryActiveDistance+LightActiveDistance)/TotalDistance*100) %>% 
+  mutate(Mod_Very_Dis = (ModeratelyActiveDistance+VeryActiveDistance)/TotalDistance*100)
+  
+
+
+
+
+
+# Daily Intensity  Analysis
+## Summary Statistics for Intensity
+sum_intensity = dailyActivity %>% 
+  group_by(Id) %>% 
+  summarize(days=length(Id),
+            Logged_Distance = sum(VeryActiveDistance)+sum(ModeratelyActiveDistance)+sum(LightActiveDistance)+sum(SedentaryActiveDistance),
+            V_dist_avg = sum(VeryActiveDistance)/Logged_Distance,
+            m_dist_avg= sum(ModeratelyActiveDistance)/Logged_Distance,
+            l_dist_avg= sum(LightActiveDistance)/Logged_Distance,
+            Logged_Minutes = sum(VeryActiveMinutes)+sum(FairlyActiveMinutes)+sum(LightlyActiveMinutes)+sum(SedentaryMinutes),
+            V_min_avg=sum(VeryActiveMinutes)/Logged_Minutes,
+            m_min_avg=sum(FairlyActiveMinutes)/Logged_Minutes,
+            l_min_avg=sum(LightlyActiveMinutes)/Logged_Minutes,
+            s_min_avg=sum(SedentaryMinutes)/Logged_Minutes)
+
+print(sum_activity, n=40)
+
+## Plots of Intensity Distance Ratio vs Number of Active Days 
+ggplot(data=sum_intensity)+
+  geom_point(mapping=aes(x=days,y=V_dist_avg))+
+  ggtitle("Intensity Distance vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Proportion of Very Intense Distance")
+
+## Plots of Intensity Time Ratio vs Number of Active Days 
+ggplot(data=sum_intensity)+
+  geom_point(mapping=aes(x=days,y=V_min_avg+m_min_avg))+
+  ggtitle("Intensity Time vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Proportion of Very Intense Time")
+
+
+## Plots of Intensity Time Ratio vs Number of Active Days 
+ggplot(data=sum_intensity)+
+  geom_point(mapping=aes(x=days,y=s_min_avg))+
+  ggtitle("Intensity Time vs Number of Active Days") + 
+  xlab("Number of Active Days") +
+  ylab("Proportion of Very Intense Time")
